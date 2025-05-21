@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperclip, faPaperPlane, faRobot, faMagnifyingGlass, faPlus, faChevronLeft, faCircleChevronDown, faComment, faUserCircle, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faPaperclip, faPaperPlane, faRobot, faMagnifyingGlass, faPlus, faChevronLeft, faCircleChevronDown, faComment, faUserCircle, faTimes , faTrash} from '@fortawesome/free-solid-svg-icons';
 import FormLogin from "../../User/Form/FormLogin";
 import List from "./List";
 
@@ -63,6 +63,18 @@ export default function ChatForm() {
     }
   };
 
+  function onRemoveHistoryChat(selectedChat) {
+    const jwtToken = localStorage.getItem("token");
+    fetch(`http://localhost:8080/chat-history/${selectedChat}` , {
+      method: "DELETE",
+      headers : {
+        "Content-Type" : "application/son",
+        Authorization : `Bearer ${jwtToken}`
+      }
+    })
+    .then(respone => setRecentChats(prev => prev.filter(e => e.idHistory != selectedChat)))
+  }
+
   function checkValidToken(jwtToken) {
     const token = jwtToken;
     console.log("token ", token);
@@ -108,6 +120,10 @@ export default function ChatForm() {
     return data.idHistory;
   }
 
+  function createNewChat(e) {
+    setSelectedChat(null);
+    setMessages([]);
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -307,7 +323,7 @@ export default function ChatForm() {
             </span>
           </div>
           <div className="sidebar-header-right">
-            <button className="icon-button search-icon">
+            <button className="icon-button search-icon" title="Thêm chat mới" onClick={createNewChat}>
               <FontAwesomeIcon icon={faPlus} />
             </button>
             <button className="icon-button plus-icon">
@@ -326,32 +342,30 @@ export default function ChatForm() {
                 </span>
                 History
               </h3>
-              <a href="#" className="view-all">View all</a>
             </div>
             <ul className="nav-list">
               {recentChats.length > 0 ? (
                 recentChats.map((chat) => (
-                  <li key={chat.idHistory} onClick={() => { fetchChatDetails(chat.idHistory) }} className={selectedChat == chat.idHistory ? "active" : ""}>
+                  <li title={chat.summary} key={chat.idHistory} onClick={() => { fetchChatDetails(chat.idHistory) }} className={selectedChat == chat.idHistory ? "active" : ""}>
                     <span className="icon item-icon">
                       <FontAwesomeIcon icon={faComment} />
                     </span>
                     {chat.summary && chat.summary.length > 30
                       ? `${chat.summary.substring(0, 30)}...`
                       : chat.summary || "Không có tóm tắt"}
+                    <span title="Xóa lịch sử chat" className="icon item-delete" onClick={function() {onRemoveHistoryChat(chat.idHistory)}}>
+                      <FontAwesomeIcon icon={faTrash} />
+                    </span>
                   </li>
                 ))
               ) : (
-                <li>Không có lịch sử chat.</li>
+                <li>Không có lịch sử chat. <span className="icon item-icon">
+                      <FontAwesomeIcon icon={faTrash} />
+                    </span></li>
               )}
             </ul>
           </section>
         </nav>
-        <div className="sidebar-footer">
-          <a href="#" className="nav-item upgrade-link">
-            <span className="icon item-icon">[UP]</span>
-            Upgrade plan for more access to new mo...
-          </a>
-        </div>
       </aside>
 
       <main className="main-content">

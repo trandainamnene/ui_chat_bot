@@ -243,6 +243,15 @@ html {
     color: #909090;
 }
 
+.item-delete {
+    display: none;
+    margin-left: auto;
+}
+
+.nav-list li .item-delete {
+    margin-left: auto;
+}
+
 .nav-list li.active .item-icon {
     color: #b0b0ff;
 }
@@ -257,6 +266,10 @@ html {
 
 .nav-list li:hover .more-options {
     color: #ccc;
+}
+
+.nav-list li:hover .item-delete {
+    display: block;
 }
 
 
@@ -288,7 +301,7 @@ html {
 
 /* Main Content Area */
 .main-content {
-    flex-grow: 1;
+    width: 70%;
     background-color: #1e1e1e;
     padding: 20px 30px;
     display: flex;
@@ -341,6 +354,7 @@ html {
     line-height: 1.6;
     color: #e0e0e0;
     margin-bottom: 24px;
+    white-space: pre-line;
 }
 
 .chat-response p {
@@ -452,13 +466,15 @@ html {
         height: auto;
     }
 }
+
 .image-preview {
-  margin-top: 4px;
+    margin-top: 4px;
 }
+
 .remove-image {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #333;
-  font-size: 16px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #333;
+    font-size: 16px;
 }
