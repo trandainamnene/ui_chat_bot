@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperclip, faPaperPlane, faRobot, faMagnifyingGlass, faPlus, faChevronLeft, faCircleChevronDown, faComment, faUserCircle, faTimes , faTrash} from '@fortawesome/free-solid-svg-icons';
+import { faPaperclip, faPaperPlane, faRobot, faMagnifyingGlass, faPlus, faChevronLeft, faCircleChevronDown, faComment, faUserCircle, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import FormLogin from "../../User/Form/FormLogin";
 import List from "./List";
 
@@ -12,40 +12,42 @@ export default function ChatForm() {
   const [selectedImage, setSelectedImage] = useState(null); // State để lưu hình ảnh được chọn
   const [recentChats, setRecentChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
+  const [searchHistory, setSearchHistory] = useState("");
 
   const inputFile = useRef();
+  const historyChatList = useRef([]);
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setShowLogin(true);
+    }
 
-    useEffect(() => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setShowLogin(true);
-      }
-
-      fetch("http://localhost:8080/chat-history", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+    fetch("http://localhost:8080/chat-history", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    })
+      .then((response) => {
+        if (response.status === 403) {
+          setShowLogin(true);
+          return [];
+        }
+        if (!response.ok) {
+          throw new Error("Lỗi khi lấy dữ liệu lịch sử chat");
+        }
+        return response.json();
       })
-        .then((response) => {
-          if (response.status === 403) {
-            setShowLogin(true);
-            return [];
-          }
-          if (!response.ok) {
-            throw new Error("Lỗi khi lấy dữ liệu lịch sử chat");
-          }
-          return response.json();
-        })
-        .then((data) => {
-          setRecentChats(data);
-        })
-        .catch((error) => {
-          console.error("Lỗi khi lấy lịch sử chat:", error);
-          setRecentChats([]);
-        });
-    }, [showLogin]);
+      .then((data) => {
+        setRecentChats(data);
+        historyChatList.current = data;
+      })
+      .catch((error) => {
+        console.error("Lỗi khi lấy lịch sử chat:", error);
+        setRecentChats([]);
+      });
+  }, [showLogin]);
 
 
   const onHandleSubmitFile = (e) => {
@@ -63,16 +65,21 @@ export default function ChatForm() {
     }
   };
 
+  // useEffect(() => {
+  //   console.log("searchHistory" , searchHistory)
+  //   historyChatList.current = recentChats.filter(e => e.summary.includes(searchHistory))
+  // } , [searchHistory]); 
+
   function onRemoveHistoryChat(selectedChat) {
     const jwtToken = localStorage.getItem("token");
-    fetch(`http://localhost:8080/chat-history/${selectedChat}` , {
+    fetch(`http://localhost:8080/chat-history/${selectedChat}`, {
       method: "DELETE",
-      headers : {
-        "Content-Type" : "application/son",
-        Authorization : `Bearer ${jwtToken}`
+      headers: {
+        "Content-Type": "application/son",
+        Authorization: `Bearer ${jwtToken}`
       }
     })
-    .then(respone => setRecentChats(prev => prev.filter(e => e.idHistory != selectedChat)))
+      .then(respone => setRecentChats(prev => prev.filter(e => e.idHistory != selectedChat)))
   }
 
   function checkValidToken(jwtToken) {
@@ -231,6 +238,23 @@ export default function ChatForm() {
     console.log(messages);
   };
 
+  function formatBotText(text) {
+    const lines = text.split("\n");
+    return lines.map((line, index) => {
+      if (/^\*\*(.+)\*\*$/.test(line)) {
+        // Nếu là dòng tiêu đề (ví dụ: **Xét nghiệm máu:**)
+        const title = line.match(/^\*\*(.+)\*\*$/)[1];
+        return <strong key={index} style={{ display: 'block', marginTop: '1em' }}>{title}</strong>;
+      } else if (/^\*\s(.+)/.test(line)) {
+        // Nếu là dòng gạch đầu dòng (ví dụ: * AST, ALT)
+        const item = line.match(/^\*\s(.+)/)[1];
+        return <li key={index} style={{ marginLeft: '1.5em' }}>{item}</li>;
+      } else {
+        return <p key={index}>{line}</p>;
+      }
+    });
+  }
+
   function insertChatToDb(idSelectedChat, jwtToken, question, answer) {
     console.log("JWT Token : ", jwtToken);
     const getInput = messages[messages.length - 1];
@@ -291,7 +315,7 @@ export default function ChatForm() {
 
   async function createSummary(input, jwtToken) {
     return fetch("http://localhost:5000/summarize", {
-      method : "POST",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${jwtToken}`,
         "Content-Type": "application/json",
@@ -306,6 +330,11 @@ export default function ChatForm() {
 
   }
 
+  function logOut() {
+    localStorage.removeItem("token");
+    setShowLogin(true);
+  }
+
   return (
     <div className="app-container vw-100">
       {/* <List /> */}
@@ -317,7 +346,7 @@ export default function ChatForm() {
             <span className="icon logo-icon">
               <FontAwesomeIcon icon={faRobot} />
             </span>
-            <input type="text" className="contents-input" placeholder="Content..." />
+            <input type="text" value={searchHistory} onChange={(e) => { setSearchHistory(e.target.value) }} className="contents-input" placeholder="Tìm kiếm đoạn chat" />
             <span className="icon item-icon">
               <FontAwesomeIcon icon={faMagnifyingGlass} />
             </span>
@@ -345,23 +374,26 @@ export default function ChatForm() {
             </div>
             <ul className="nav-list">
               {recentChats.length > 0 ? (
-                recentChats.map((chat) => (
-                  <li title={chat.summary} key={chat.idHistory} onClick={() => { fetchChatDetails(chat.idHistory) }} className={selectedChat == chat.idHistory ? "active" : ""}>
-                    <span className="icon item-icon">
-                      <FontAwesomeIcon icon={faComment} />
-                    </span>
-                    {chat.summary && chat.summary.length > 30
-                      ? `${chat.summary.substring(0, 30)}...`
-                      : chat.summary || "Không có tóm tắt"}
-                    <span title="Xóa lịch sử chat" className="icon item-delete" onClick={function() {onRemoveHistoryChat(chat.idHistory)}}>
-                      <FontAwesomeIcon icon={faTrash} />
-                    </span>
-                  </li>
-                ))
-              ) : (
-                <li>Không có lịch sử chat. <span className="icon item-icon">
-                      <FontAwesomeIcon icon={faTrash} />
-                    </span></li>
+                recentChats.map((chat) => {
+                  console.log(chat)
+                  if (chat.summary.includes(searchHistory)) {
+                    return (<li title={chat.summary} key={chat.idHistory} onClick={() => { fetchChatDetails(chat.idHistory) }} className={selectedChat == chat.idHistory ? "active" : ""}>
+                      <span className="icon item-icon">
+                        <FontAwesomeIcon icon={faComment} />
+                      </span>
+                      {chat.summary && chat.summary.length > 30
+                        ? `${chat.summary.substring(0, 30)}...`
+                        : chat.summary || "Không có tóm tắt"}
+                      <span title="Xóa lịch sử chat" className="icon item-delete" onClick={function () { onRemoveHistoryChat(chat.idHistory) }}>
+                        <FontAwesomeIcon icon={faTrash} />
+                      </span>
+                    </li>)
+                  }
+                }
+                )) : (
+              <li>Không có lịch sử chat. <span className="icon item-icon">
+                <FontAwesomeIcon icon={faTrash} />
+              </span></li>
               )}
             </ul>
           </section>
@@ -369,9 +401,10 @@ export default function ChatForm() {
       </aside>
 
       <main className="main-content">
+        <h1 className="main-content__heading">{messages.length > 0 ? "" : "CHAT BOT HỖ TRỢ BÁC SỸ ĐƯA RA QUYẾT ĐỊNH LÂM SÀN"} </h1>
         <div className="main-content-header-icons">
-          <button className="icon-button">
-            <FontAwesomeIcon icon={faUserCircle} className="icon-user" />
+          <button className="icon-button main-content__log-out" onClick={logOut}>
+            {showLogin ? "Đăng nhập" : "Đăng xuất"}
           </button>
         </div>
         <div className="chat-area">
@@ -388,7 +421,7 @@ export default function ChatForm() {
                     style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", marginBottom: "8px" }}
                   />
                 )}
-                {msg.text}
+                {msg.sender === "bot" ? formatBotText(msg.text) : msg.text}
               </p>
             </div>
           ))}
@@ -407,13 +440,25 @@ export default function ChatForm() {
           />
           <form onSubmit={handleSubmit} className="chat-input-form">
             <div className="chat-input-wrapper">
-              <input
-                type="text"
+              <textarea
                 className="chat-input"
-                placeholder="How can I help you?"
+                placeholder="Hãy cung cấp triệu chứng bệnh nhân đang gặp phải?"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (e.shiftKey) {
+                      e.preventDefault();
+                      const newText = input + '\n';
+                      setInput(newText);
+                    } else {
+                      e.preventDefault(); // chặn xuống dòng mặc định
+                      handleSubmit(e);   // gọi hàm gửi
+                    }
+                  }
+                }}
                 disabled={isStreaming}
+
               />
               {selectedImage && (
                 <div className="image-preview">
