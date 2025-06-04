@@ -1,492 +1,377 @@
 import { useEffect, useRef, useState } from "react";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperclip, faPaperPlane, faRobot, faMagnifyingGlass, faPlus, faChevronLeft, faCircleChevronDown, faComment, faUserCircle, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
-import FormLogin from "../../User/Form/FormLogin";
-import List from "./List";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import style from './Form.module.css'
+import {
+  faPaperclip,
+  faPaperPlane,
+  faMagnifyingGlass,
+  faPlus,
+  faCircleChevronDown,
+  faComment,
+  faArrowDown,
+  faUserDoctor,
+  faTimes,
+  faTrash,
+  faEdit,
+} from "@fortawesome/free-solid-svg-icons";
+import FormLogin from "./FormLogin.jsx";
+import Sidebar from "./Sidebar";
+import ChatArea from "./ChatArea.jsx";
+import ChatInput from "./ChatInput.jsx";
+// Hằng số cho API và cấu hình
+const API_URL = "http://localhost:8080";
+const AI_URL = "http://localhost:5000";
+const TOKEN_KEY = "token";
+const SCROLL_THRESHOLD = 10;
+
+// Hàm tiện ích để gọi API với xác thực
+const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 403) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(`Lỗi HTTP! Mã trạng thái: ${response.status}`);
+  }
+  return response;
+};
+
+
+
 
 export default function ChatForm() {
+  // Quản lý trạng thái
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // State để lưu hình ảnh được chọn
+  const [selectedImage, setSelectedImage] = useState(null);
   const [recentChats, setRecentChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [searchHistory, setSearchHistory] = useState("");
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
 
-  const inputFile = useRef();
-  const historyChatList = useRef([]);
+  // Ref cho các phần tử DOM
+  const chatAreaRef = useRef(null);
+  const inputFileRef = useRef(null);
+  const labelChatHistoryRef = useRef({});
+  
+  // Lấy lịch sử chat khi component mount hoặc trạng thái đăng nhập thay đổi
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       setShowLogin(true);
     }
-
-    fetch("http://localhost:8080/chat-history", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-      .then((response) => {
-        if (response.status === 403) {
-          setShowLogin(true);
-          return [];
-        }
-        if (!response.ok) {
-          throw new Error("Lỗi khi lấy dữ liệu lịch sử chat");
-        }
-        return response.json();
-      })
-      .then((data) => {
-        setRecentChats(data);
-        historyChatList.current = data;
-      })
+    fetchWithAuth(`${API_URL}/chat-history`)
+      .then((response) => response.json())
+      .then((data) => setRecentChats(data))
       .catch((error) => {
         console.error("Lỗi khi lấy lịch sử chat:", error);
         setRecentChats([]);
       });
-  }, [showLogin]);
+  }, [showLogin, selectedChat]);
 
+   // Sửa useEffect để chỉ cuộn khi người dùng không cuộn lên
+  useEffect(() => {
+    if (chatAreaRef.current && !isUserScrolling) {
+      const isAtBottom =
+        chatAreaRef.current.scrollHeight - chatAreaRef.current.scrollTop <=
+        chatAreaRef.current.clientHeight + SCROLL_THRESHOLD;
+      if (isAtBottom) {
+        chatAreaRef.current.scrollTo({
+          top: chatAreaRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+        setShowScrollToBottom(false);
+      }
+    }
+  }, [messages, selectedChat, isUserScrolling]);
 
-  const onHandleSubmitFile = (e) => {
+  useEffect(() => {
+    const chatArea = chatAreaRef.current;
+    const handleScroll = () => {
+      if (chatArea) {
+        const isAtBottom =
+          chatArea.scrollHeight - chatArea.scrollTop <=
+          chatArea.clientHeight + SCROLL_THRESHOLD;
+        setShowScrollToBottom(!isAtBottom);
+        // Nếu người dùng cuộn lên (scrollTop giảm đáng kể), đánh dấu isUserScrolling
+        if (!isAtBottom && isStreaming) {
+          setIsUserScrolling(true);
+        } else if (isAtBottom) {
+          setIsUserScrolling(false); // Reset khi người dùng trở lại gần cuối
+        }
+      }
+    };
+
+    chatArea?.addEventListener("scroll", handleScroll);
+    return () => chatArea?.removeEventListener("scroll", handleScroll);
+  }, [isStreaming]);
+
+  // Các hàm xử lý chức năng chat
+  const scrollToBottom = () => {
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTo({
+        top: chatAreaRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+      setShowScrollToBottom(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setSelectedImage(URL.createObjectURL(file)); // Tạo URL tạm thời để xem trước
+      setSelectedImage(URL.createObjectURL(file));
     }
-    console.dir(e.target);
   };
 
   const handleRemoveImage = () => {
-    setSelectedImage(null); // Xóa hình ảnh đã chọn
-    if (inputFile.current) {
-      inputFile.current.value = ""; // Reset input file
+    setSelectedImage(null);
+    if (inputFileRef.current) {
+      inputFileRef.current.value = "";
     }
   };
 
-  // useEffect(() => {
-  //   console.log("searchHistory" , searchHistory)
-  //   historyChatList.current = recentChats.filter(e => e.summary.includes(searchHistory))
-  // } , [searchHistory]); 
-
-  function onRemoveHistoryChat(selectedChat) {
-    const jwtToken = localStorage.getItem("token");
-    fetch(`http://localhost:8080/chat-history/${selectedChat}`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/son",
-        Authorization: `Bearer ${jwtToken}`
-      }
-    })
-      .then(respone => setRecentChats(prev => prev.filter(e => e.idHistory != selectedChat)))
-  }
-
-  function checkValidToken(jwtToken) {
-    const token = jwtToken;
-    console.log("token ", token);
+  const checkValidToken = async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       setShowLogin(true);
       return false;
-    } else {
-      return fetch("http://localhost:8080/auth/check", {
-        method: 'POST',
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      })
-        .then(response => {
-          if (response.status === 403) {
-            setShowLogin(true);
-          } else {
-            return response.json();
-          }
-        })
-        .then(status => status);
     }
-  }
+    try {
+      const response = await fetchWithAuth(`${API_URL}/auth/check`, {
+        method: "POST",
+      });
+      return await response.json();
+    } catch {
+      setShowLogin(true);
+      return false;
+    }
+  };
 
-  async function createNewChatHistory(jwtToken, summary) {
-    const response = await fetch("http://localhost:8080/chat-history", {
+  const createSummary = async (question, token) => {
+    const response = await fetchWithAuth(`${AI_URL}/summarize`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        summary: summary,
-      })
+      body: JSON.stringify({ question, image: null }),
     });
+    const { answer } = await response.json();
+    return answer;
+  };
 
-    if (!response.ok) {
-      throw new Error("Lỗi khi tạo lịch sử chat mới");
-    }
+  const createNewChatHistory = async (summary) => {
+    const response = await fetchWithAuth(`${API_URL}/chat-history`, {
+      method: "POST",
+      body: JSON.stringify({ summary }),
+    });
+    const { idHistory } = await response.json();
+    return idHistory;
+  };
 
-    const data = await response.json();
-    return data.idHistory;
-  }
-
-  function createNewChat(e) {
+  const createNewChat = () => {
     setSelectedChat(null);
     setMessages([]);
-  }
+  };
+
+  const fetchChatDetails = async (idHistory) => {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/question/${idHistory}`);
+      const data = await response.json();
+      const chatMessages = data
+        .map((item) => [
+          { sender: "user", text: item.questiontext, image: item.base64URLImage },
+          { sender: "bot", text: item.responsetext },
+        ])
+        .flat();
+      setMessages(chatMessages);
+      setSelectedChat(idHistory);
+    } catch (error) {
+      console.error("Lỗi khi lấy chi tiết chat:", error);
+      setMessages([]);
+      if (error.message === "Unauthorized") setShowLogin(true);
+    }
+  };
+
+  const insertChatToDb = async (idHistory, question, answer, base64Image) => {
+    await fetchWithAuth(`${API_URL}/question/${idHistory}`, {
+      method: "POST",
+      body: JSON.stringify({
+        questiontext: question,
+        responsetext: answer,
+        base64URLImage: base64Image,
+        idHistory: { idHistory },
+      }),
+    });
+  };
+
+  const handleRemoveHistoryChat = async (idHistory) => {
+    try {
+      await fetchWithAuth(`${API_URL}/chat-history/${idHistory}`, {
+        method: "DELETE",
+      });
+      setRecentChats((prev) => prev.filter((chat) => chat.idHistory !== idHistory));
+    } catch (error) {
+      console.error("Lỗi khi xóa lịch sử chat:", error);
+    }
+  };
+
+  const handleEditLabelChatHistory = (idHistory) => {
+    const element = labelChatHistoryRef.current[idHistory];
+    if (element) {
+      element.contentEditable = true;
+      element.focus();
+    }
+  };
+
+  const handleKeydownLabelHistory = (idHistory, e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      fetchWithAuth(`${API_URL}/chat-history/${idHistory}`, {
+        method: "PATCH",
+        body: JSON.stringify({ summary: e.target.innerText }),
+      }).then(() => e.target.blur());
+    }
+  };
+
+  const getImageBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const jwtToken = localStorage.getItem("token");
-    console.log("jwt token from local storage : ", jwtToken);
-    let isValidToken = await checkValidToken(jwtToken);
-    console.log(`isValidToken ${isValidToken}`);
-    if (!isValidToken) {
-      return;
-    }
+    if (!input.trim() && !inputFileRef.current?.files?.[0]) return;
+
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!(await checkValidToken())) return;
+
     let currentChatId = selectedChat;
     if (!currentChatId) {
       try {
-        const summary = await createSummary(input, jwtToken);
-        const newChatId = await createNewChatHistory(jwtToken, summary);
-        setSelectedChat(newChatId);
-        currentChatId = newChatId;
-      } catch (err) {
-        console.log(err);
-        console.error("Không thể tạo lịch sử chat mới:", err);
+        const summary = await createSummary(input, token);
+        currentChatId = await createNewChatHistory(summary);
+        setSelectedChat(currentChatId);
+      } catch (error) {
+        console.error("Lỗi khi tạo lịch sử chat mới:", error);
+        return;
       }
     }
 
-    if (!input.trim() && !inputFile.current?.files?.[0]) return;
-
-    const file = inputFile.current?.files?.[0];
-
-    const getImageBase64 = (file) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = reader.result;
-          resolve(base64String);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    };
-
+    const file = inputFileRef.current?.files?.[0];
     let userMessage = { sender: "user", text: input };
-    if (file) {
-      const base64 = await getImageBase64(file);
-      userMessage = { ...userMessage, image: base64 };
-    }
-    if (messages.length == 0) {
+    let base64Image = null;
+    console.log(file);
 
+    if (file) {
+      base64Image = await getImageBase64(file);
+      userMessage = { ...userMessage, image: base64Image };
     }
+
     setMessages((prev) => [...prev, userMessage, { sender: "bot", text: "" }]);
     setInput("");
-    setSelectedImage(null); // Xóa hình ảnh xem trước sau khi gửi
-    if (inputFile.current) {
-      inputFile.current.value = ""; // Reset input file
-    }
+    setSelectedImage(null);
+    if (inputFileRef.current) inputFileRef.current.value = "";
     setIsStreaming(true);
-    let body = JSON.stringify({ question: input, image: null });
 
-    if (file) {
-      const base64 = await getImageBase64(file);
-      body = JSON.stringify({
-        question: input,
-        image: {
-          url: base64.split(',')[1],
-          type: file.type
-        }
-      });
-    }
+    const body = JSON.stringify({
+      question: input,
+      image: file ? { url: base64Image.split(",")[1], type: file.type } : null,
+    });
+
     try {
-      const res = await fetch("http://localhost:5000/generative_ai", {
+      const response = await fetchWithAuth(`${AI_URL}/generative_ai/${currentChatId}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: body,
+        headers: { Accept: "text/event-stream" },
+        body,
       });
 
-      const reader = res.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let accumulated = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        accumulated += chunk;
-
+        accumulated += decoder.decode(value, { stream: true });
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { sender: "bot", text: accumulated };
           return updated;
         });
       }
-      console.log("168 : ", input);
-      insertChatToDb(currentChatId, jwtToken, input, accumulated)
-    } catch (err) {
-      console.log("error : ", err);
+
+      await insertChatToDb(currentChatId, input, accumulated, base64Image);
+    } catch (error) {
+      console.error("Lỗi khi streaming:", error);
       setMessages((prev) => {
         const updated = [...prev];
-        updated[updated.length - 1] = { sender: "bot", text: "Lỗi khi streaming." };
+        updated[updated.length - 1] = {
+          sender: "bot",
+          text: error.message === "Unauthorized" ? "Không có quyền truy cập. Vui lòng đăng nhập lại." : "Lỗi khi streaming.",
+        };
         return updated;
       });
     } finally {
       setIsStreaming(false);
     }
-    console.log(messages);
   };
 
-  function formatBotText(text) {
-    const lines = text.split("\n");
-    return lines.map((line, index) => {
-      if (/^\*\*(.+)\*\*$/.test(line)) {
-        // Nếu là dòng tiêu đề (ví dụ: **Xét nghiệm máu:**)
-        const title = line.match(/^\*\*(.+)\*\*$/)[1];
-        return <strong key={index} style={{ display: 'block', marginTop: '1em' }}>{title}</strong>;
-      } else if (/^\*\s(.+)/.test(line)) {
-        // Nếu là dòng gạch đầu dòng (ví dụ: * AST, ALT)
-        const item = line.match(/^\*\s(.+)/)[1];
-        return <li key={index} style={{ marginLeft: '1.5em' }}>{item}</li>;
-      } else {
-        return <p key={index}>{line}</p>;
-      }
-    });
-  }
-
-  function insertChatToDb(idSelectedChat, jwtToken, question, answer) {
-    console.log("JWT Token : ", jwtToken);
-    const getInput = messages[messages.length - 1];
-    fetch(`http://localhost:8080/question/${idSelectedChat}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(
-        {
-
-          questiontext: question,
-          responsetext: answer,
-          idHistory: {
-            idHistory: idSelectedChat
-          }
-        }
-      ),
-    })
-  }
-
-  const fetchChatDetails = async (idHistory) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setShowLogin(true);
-      return;
-    }
-    console.log(idHistory)
-    try {
-      const response = await fetch(`http://localhost:8080/question/${idHistory}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (response.status === 403) {
-        setShowLogin(true);
-        return;
-      }
-      if (!response.ok) {
-        throw new Error("Lỗi khi lấy chi tiết chat");
-      }
-      const data = await response.json();
-      // Chuyển đổi dữ liệu thành định dạng messages
-      const chatMessages = data.map((item) => [
-        { sender: "user", text: item.questiontext },
-        { sender: "bot", text: item.responsetext }
-      ]).flat();
-      setMessages(chatMessages);
-      setSelectedChat(idHistory)
-    } catch (error) {
-      console.error("Lỗi khi lấy chi tiết chat:", error);
-      setMessages([]);
-    }
-  };
-
-  async function createSummary(input, jwtToken) {
-    return fetch("http://localhost:5000/summarize", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        question: input,
-        image: null
-      })
-    })
-      .then(response => response.json())
-      .then(result => result.answer)
-
-  }
-
-  function logOut() {
-    localStorage.removeItem("token");
+  const handleLogout = () => {
+    localStorage.removeItem(TOKEN_KEY);
     setShowLogin(true);
-  }
+  };
 
   return (
     <div className="app-container vw-100">
-      {/* <List /> */}
       <FormLogin hidden={showLogin} setShowLogin={setShowLogin} />
-
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-header-left">
-            <span className="icon logo-icon">
-              <FontAwesomeIcon icon={faRobot} />
-            </span>
-            <input type="text" value={searchHistory} onChange={(e) => { setSearchHistory(e.target.value) }} className="contents-input" placeholder="Tìm kiếm đoạn chat" />
-            <span className="icon item-icon">
-              <FontAwesomeIcon icon={faMagnifyingGlass} />
-            </span>
-          </div>
-          <div className="sidebar-header-right">
-            <button className="icon-button search-icon" title="Thêm chat mới" onClick={createNewChat}>
-              <FontAwesomeIcon icon={faPlus} />
-            </button>
-            <button className="icon-button plus-icon">
-              <span className="icon item-icon">
-                <FontAwesomeIcon icon={faChevronLeft} />
-              </span>
-            </button>
-          </div>
-        </div>
-        <nav className="sidebar-nav">
-          <section className="nav-section">
-            <div className="nav-section-header">
-              <h3>
-                <span className="icon item-icon">
-                  <FontAwesomeIcon icon={faCircleChevronDown} />
-                </span>
-                History
-              </h3>
-            </div>
-            <ul className="nav-list">
-              {recentChats.length > 0 ? (
-                recentChats.map((chat) => {
-                  console.log(chat)
-                  if (chat.summary.includes(searchHistory)) {
-                    return (<li title={chat.summary} key={chat.idHistory} onClick={() => { fetchChatDetails(chat.idHistory) }} className={selectedChat == chat.idHistory ? "active" : ""}>
-                      <span className="icon item-icon">
-                        <FontAwesomeIcon icon={faComment} />
-                      </span>
-                      {chat.summary && chat.summary.length > 30
-                        ? `${chat.summary.substring(0, 30)}...`
-                        : chat.summary || "Không có tóm tắt"}
-                      <span title="Xóa lịch sử chat" className="icon item-delete" onClick={function () { onRemoveHistoryChat(chat.idHistory) }}>
-                        <FontAwesomeIcon icon={faTrash} />
-                      </span>
-                    </li>)
-                  }
-                }
-                )) : (
-              <li>Không có lịch sử chat. <span className="icon item-icon">
-                <FontAwesomeIcon icon={faTrash} />
-              </span></li>
-              )}
-            </ul>
-          </section>
-        </nav>
-      </aside>
-
+      <Sidebar
+        recentChats={recentChats}
+        selectedChat={selectedChat}
+        searchHistory={searchHistory}
+        setSearchHistory={setSearchHistory}
+        fetchChatDetails={fetchChatDetails}
+        handleRemoveHistoryChat={handleRemoveHistoryChat}
+        handleEditLabelChatHistory={handleEditLabelChatHistory}
+        handleKeydownLabelHistory={handleKeydownLabelHistory}
+        createNewChat={createNewChat}
+        labelChatHistoryRef={labelChatHistoryRef}
+      />
       <main className="main-content">
-        <h1 className="main-content__heading">{messages.length > 0 ? "" : "CHAT BOT HỖ TRỢ BÁC SỸ ĐƯA RA QUYẾT ĐỊNH LÂM SÀN"} </h1>
+        <h1 className="main-content__heading">
+          {messages.length > 0 ? "" : <div className={style['rgb-text']}>CHAT BOT HỖ TRỢ BÁC SỸ ĐƯA RA QUYẾT ĐỊNH LÂM SÀNG</div>}
+        </h1>
         <div className="main-content-header-icons">
-          <button className="icon-button main-content__log-out" onClick={logOut}>
-            {showLogin ? "Đăng nhập" : "Đăng xuất"}
+          <button className="icon-button main-content__log-out" onClick={handleLogout}>
+            {showLogin ? "" : "Đăng xuất"}
           </button>
         </div>
-        <div className="chat-area">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`${msg.sender === "user" ? "initial-prompt-container" : "chat-response"}`}
-            >
-              <p className={msg.sender === "user" ? "user-prompt-question" : "chat-response"}>
-                {msg.image && (
-                  <img
-                    src={msg.image}
-                    alt="Uploaded"
-                    style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", marginBottom: "8px" }}
-                  />
-                )}
-                {msg.sender === "bot" ? formatBotText(msg.text) : msg.text}
-              </p>
-            </div>
-          ))}
-        </div>
-        <div className="chat-input-area">
-          <label htmlFor="img" className="icon-button file-button">
-            <FontAwesomeIcon icon={faPaperclip} />
-          </label>
-          <input
-            id="img"
-            type="file"
-            accept="image/png, image/jpeg"
-            ref={inputFile}
-            onChange={onHandleSubmitFile}
-            style={{ display: "none" }}
-          />
-          <form onSubmit={handleSubmit} className="chat-input-form">
-            <div className="chat-input-wrapper">
-              <textarea
-                className="chat-input"
-                placeholder="Hãy cung cấp triệu chứng bệnh nhân đang gặp phải?"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (e.shiftKey) {
-                      e.preventDefault();
-                      const newText = input + '\n';
-                      setInput(newText);
-                    } else {
-                      e.preventDefault(); // chặn xuống dòng mặc định
-                      handleSubmit(e);   // gọi hàm gửi
-                    }
-                  }
-                }}
-                disabled={isStreaming}
-
-              />
-              {selectedImage && (
-                <div className="image-preview">
-                  <img
-                    src={selectedImage}
-                    alt="Selected"
-                    style={{ maxWidth: "100px", maxHeight: "100px", borderRadius: "4px", marginTop: "8px" }}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button remove-image"
-                    onClick={handleRemoveImage}
-                    style={{ marginLeft: "8px" }}
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              type="submit"
-              className="icon-button send-button"
-              disabled={isStreaming}
-            >
-              <FontAwesomeIcon icon={faPaperPlane} />
-            </button>
-          </form>
-        </div>
+        <ChatArea
+          messages={messages}
+          showScrollToBottom={showScrollToBottom}
+          scrollToBottom={scrollToBottom}
+          chatAreaRef={chatAreaRef}
+          isStreaming={isStreaming}
+        />
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          isStreaming={isStreaming}
+          selectedImage={selectedImage}
+          handleFileChange={handleFileChange}
+          handleRemoveImage={handleRemoveImage}
+          handleSubmit={handleSubmit}
+          inputFileRef={inputFileRef}
+        />
       </main>
     </div>
   );

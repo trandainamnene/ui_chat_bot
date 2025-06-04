@@ -1,0 +1,41 @@
+.form_container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    position : fixed;
+    z-index: 1;
+    flex-direction: column;
+}
+
+.form_action {
+    display: flex;
+    flex-direction: column;
+}
+
+.rgb-text {
+  font-weight: bold;
+  background: linear-gradient(
+    to right,
+    rgb(121, 119, 119),
+    rgb(72, 74, 72),
+    rgb(100, 100, 104),
+    rgb(223, 218, 218)
+  );
+  background-size: 50% 100%; /* Tăng kích thước background để tạo hiệu ứng di chuyển */
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent; /* Làm chữ trong suốt để hiện gradient */
+  animation: slide 6s linear infinite;
+  font-size: 32px;
+}
+
+@keyframes slide {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: 200% 0; /* Gradient di chuyển từ trái sang phải */
+  }
+}
