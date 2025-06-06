@@ -20,7 +20,7 @@ import ChatArea from "./ChatArea.jsx";
 import ChatInput from "./ChatInput.jsx";
 // Hằng số cho API và cấu hình
 const API_URL = "http://localhost:8080";
-const AI_URL = "http://localhost:5000";
+const AI_URL = "http://localhost:8080/api/chat";
 const TOKEN_KEY = "token";
 const SCROLL_THRESHOLD = 10;
 
@@ -102,11 +102,10 @@ export default function ChatForm() {
           chatArea.scrollHeight - chatArea.scrollTop <=
           chatArea.clientHeight + SCROLL_THRESHOLD;
         setShowScrollToBottom(!isAtBottom);
-        // Nếu người dùng cuộn lên (scrollTop giảm đáng kể), đánh dấu isUserScrolling
         if (!isAtBottom && isStreaming) {
           setIsUserScrolling(true);
         } else if (isAtBottom) {
-          setIsUserScrolling(false); // Reset khi người dùng trở lại gần cuối
+          setIsUserScrolling(false); 
         }
       }
     };
@@ -115,7 +114,6 @@ export default function ChatForm() {
     return () => chatArea?.removeEventListener("scroll", handleScroll);
   }, [isStreaming]);
 
-  // Các hàm xử lý chức năng chat
   const scrollToBottom = () => {
     if (chatAreaRef.current) {
       chatAreaRef.current.scrollTo({
@@ -157,13 +155,13 @@ export default function ChatForm() {
     }
   };
 
-  const createSummary = async (question, token) => {
-    const response = await fetchWithAuth(`${AI_URL}/summarize`, {
-      method: "POST",
-      body: JSON.stringify({ question, image: null }),
-    });
-    const { answer } = await response.json();
-    return answer;
+  const createSummary = async (question) => {
+    // const response = await fetchWithAuth(`${AI_URL}/summarize`, {
+    //   method: "POST",
+    //   body: JSON.stringify({ question, image: null }),
+    // });
+    // const { answer } = await response.json();
+    return "123123";
   };
 
   const createNewChatHistory = async (summary) => {
@@ -217,6 +215,8 @@ export default function ChatForm() {
         method: "DELETE",
       });
       setRecentChats((prev) => prev.filter((chat) => chat.idHistory !== idHistory));
+      setMessages([]);
+      setSelectedChat(null);
     } catch (error) {
       console.error("Lỗi khi xóa lịch sử chat:", error);
     }
@@ -289,10 +289,14 @@ export default function ChatForm() {
     });
 
     try {
-      const response = await fetchWithAuth(`${AI_URL}/generative_ai/${currentChatId}`, {
+      const response = await fetch(`${AI_URL}/generative_ai/${currentChatId}`, {
         method: "POST",
-        headers: { Accept: "text/event-stream" },
-        body,
+        headers: { 
+          Authorization : `Bearer ${token}`,
+          Accept: "text/event-stream",
+          "Content-Type": "application/json"
+        },
+        body : body,
       });
 
       const reader = response.body.getReader();

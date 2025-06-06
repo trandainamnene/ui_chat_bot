@@ -36,6 +36,7 @@ function FormLogin({ hidden, setShowLogin }) {
                     localStorage.setItem("token", token)
                     console.log(token)
                     setShowLogin(false)
+                    setIsLoading(false)
                 }
 
             })
